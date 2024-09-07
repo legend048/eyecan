@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <video id="video" width="640" height="480" autoplay></video>
+    <script>
+        const video = document.getElementById('video');
+
+        // Prompt user to allow camera access
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error accessing the camera: ", err);
+            });
+
+        // Initialize WebSocket connection
+        const video_ws = new WebSocket('ws://localhost:8000/ws/video/');
+
+        video_ws.onopen = () => {
+            console.log("video_ws connection opened.");
+            // Start capturing frames and sending them to the backend
+            captureAndSendFrames();
+        };
+
+        video_ws.onmessage = (event) => {
+            console.log("video_ws received from server: ", event.data);
+        };
+
+        video_ws.onerror = (error) => {
+            console.error("video_ws error: ", error);
+        };
+
+        video_ws.onclose = () => {
+            console.log("video_ws connection closed.");
+        };
+
+        function captureAndSendFrames() {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = video.width;
+            canvas.height = video.height;
+
+            setInterval(() => {
+                // Draw current video frame to the canvas
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                // Convert canvas to a data URL (Base64 encoded image)
+                const frameData = canvas.toDataURL('image/jpeg');
+                // Send frame data over WebSocket
+                if (video_ws.readyState === WebSocket.OPEN) {
+                    video_ws.send(frameData);
+                }
+            }, 100); // Adjust the interval as needed (e.g., 100 ms for 10 fps)
+        }
+    </script>
+
+
+    <script> // WebSocket
+        let threshold = 0.05
+        {% comment %} document.getElementById("threshold_slider").value = Math.round(threshold/0.005)
+        rangeSlide(Math.round(threshold/0.005)) {% endcomment %}
+        let ws;
+        const ws_reconnect_btn = document.getElementById("ws_reconnect_btn");
+  
+        function ws_connect() {
+          ws = new WebSocket(
+            "ws://" + window.location.host + "/ws/chat/"
+          );
+  
+          ws.onopen = function() {
+            ws_reconnect_btn.style.display = "none";
+          }
+          
+          ws.onmessage = function (e) {
+            {% comment %} console.log('Message from server: ', e.data); {% endcomment %}
+            responce = JSON.parse(e.data)
+            if ("text" in responce){
+              if (responce['text'] == null){
+                temppara.innerHTML = "";
+                currpara.innerHTML +=  " ";
+                
+              } else {
+                var str = responce['text'].replaceAll("<unk>","");
+                Object.keys(dictatCommands)
+                  .sort((a, b) => b.length - a.length) // Sort keys by length in descending order
+                  .forEach(key => {
+                      const regex = new RegExp(`([\\s" ,.:;])${key}([\\s" ,.:;])`, 'gi');
+                      str = str.replace(regex, `$1${dictatCommands[key]}$2`);
+                  }); 
+                temppara.innerHTML = "";
+                str += " ";
+                currpara.innerHTML += str;
+                {% comment %} livetext.innerHTML +=  str; {% endcomment %}
+              } tempTextLen = 0;
+            }
+            
+            
+          }; 
+        }
+  
+        ws_connect();
+        ws_reconnect_btn.style.display = "none";
+        ws.onclose = function (e) {
+          console.error("Chat video_ws closed unexpectedly");
+          ws_reconnect_btn.disable = false;
+          ws_reconnect_btn.style.display = "block";
+        };
+  
+        function ws_reconnect(){
+          ws_connect();
+        }
+  
+      </script>
+</body>
+</html>
