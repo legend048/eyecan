@@ -6,7 +6,122 @@
     <title>Document</title>
 </head>
 <body>
-    <video id="video" width="640" height="480" autoplay></video>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: black;
+        }
+        
+        #calibration-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #circle {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: black;
+            border: 2px solid white;
+            display: none;
+        }
+        
+    </style>
+    <video style="position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);" id="video" width="640" height="480" autoplay></video>
+    <div id="calibration-container">
+        <div id="circle"></div>
+    </div>
+    <script>
+        const circle = document.getElementById('circle');
+        const bufferTime = 1000; // 1 second buffer time
+        const frameCount = 10;
+        let currentStep = 0;
+        let caleInterval = null; // Declare interval variable globally
+        let calibrationSteps = [
+            { top: '0%', left: '50%', transform: 'translate(-50%, 0%)' }, // Top
+            { top: '50%', left: '100%', transform: 'translate(-100%, -50%)' }, // Right
+            { top: '100%', left: '50%', transform: 'translate(0%, -100%)' }, // Bottom
+            { top: '50%', left: '0%', transform: 'translate(0, -50%)' } // Left
+        ];
+
+        function showCircle(step) {
+            if (step >= calibrationSteps.length) return;
+
+            const { top, left, transform } = calibrationSteps[step];
+            circle.style.top = top;
+            circle.style.left = left;
+            circle.style.transform = transform;
+            circle.style.display = 'block';
+
+            setTimeout(() => {
+                startCalibration(step);
+            }, bufferTime);
+        }
+
+        async function startCalibration(step) {
+            let frameCountRemaining = frameCount;
+
+            async function sendFrame() {
+                if (frameCountRemaining <= 0) {
+                    if (step < calibrationSteps.length - 1) {
+                        showCircle(step + 1);
+                    } else {
+                        console.log('Calibration complete');
+                        stopFrameCapture(); // Stop frame capture after calibration
+                    }
+                    return;
+                }
+
+                // Call captureAndSendFrames_forcale to start capturing frames
+                await captureAndSendFrames_forcale();
+                console.log(`Sending frame for step ${step + 1}, remaining: ${frameCountRemaining}`);
+                frameCountRemaining--;
+                setTimeout(sendFrame, 25); // Adjust the interval based on your needs
+            }
+
+            setTimeout(sendFrame, bufferTime);
+        }
+
+        // Start the calibration process on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(function (){
+                showCircle(currentStep);
+            },5000)
+        });
+
+        function captureAndSendFrames_forcale() {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = video.width;
+            canvas.height = video.height;
+                // Draw current video frame to the canvas
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // Convert canvas to a data URL (Base64 encoded image)
+            const frameData = canvas.toDataURL('image/jpeg');
+            // Send frame data over WebSocket
+            if (video_ws.readyState === WebSocket.OPEN) {
+                video_ws.send(frameData);
+            } // Adjust the interval as needed (e.g., 100 ms for 10 fps)
+        }
+
+        // Function to stop frame capture
+        function stopFrameCapture() {
+            if (caleInterval) {
+                clearInterval(caleInterval);
+                caleInterval = null; // Reset the interval variable
+                console.log('Frame capture stopped.');
+                captureAndSendFrames()
+            }
+        }
+
+    </script>
     <script>
         const video = document.getElementById('video');
 
@@ -24,12 +139,12 @@
 
         video_ws.onopen = () => {
             console.log("video_ws connection opened.");
-            // Start capturing frames and sending them to the backend
-            captureAndSendFrames();
         };
 
         video_ws.onmessage = (event) => {
             console.log("video_ws received from server: ", event.data);
+            let cords = map_value(event.data,)
+            console.log(cords)
         };
 
         video_ws.onerror = (error) => {
@@ -54,11 +169,16 @@
                 // Send frame data over WebSocket
                 if (video_ws.readyState === WebSocket.OPEN) {
                     video_ws.send(frameData);
+
                 }
             }, 100); // Adjust the interval as needed (e.g., 100 ms for 10 fps)
         }
     </script>
-
+    <script>
+        function map_value(value, from_low, from_high, to_low, to_high){
+            return (value - from_low) * (to_high - to_low) / (from_high - from_low) + to_low
+        }
+    </script>
 
     <script> // WebSocket
         let threshold = 0.05
